@@ -1,7 +1,6 @@
 ///////////////////////////////////////////////
 //
 //  THIS VARIANT IS MADE TO CONTROL DETECT ALPHA WAVES
-//  TUTORIAL LINK *HERE*
 //
 //
 // GUI for controlling the ADS1299-based OpenBCI
@@ -109,12 +108,6 @@ String fileName = "N/A";
 EEG_Processing eegProcessing;
 EEG_Processing_User eegProcessing_user;
 
-//define Helicopter
-//String helicopter_portName = "/dev/tty.usbmodem1411";  //starts as N/A but is selected from control panel to match your OpenBCI USB Dongle's serial/COM
-//Serial helicopter_serial;
-//int helicopter_baud = 115200; //baud rate from the Arduino
-//Helicopter helicopter;
-
 //fft constants
 int Nfft = 256; //set resolution of the FFT.  Use N=256 for normal, N=512 for MU waves
 FFT fftBuff[] = new FFT[nchan];   //from the minim library
@@ -215,14 +208,6 @@ void setup() {
 
   playground = new Playground(navBarHeight);
 
-//  try {
-//    println("OpenBCI_GUI:  attempting to open serial port for Helicopter using name = " + helicopter_portName);
-//    println(Serial.list());
-//    helicopter_serial = new Serial(this,helicopter_portName,helicopter_baud); //open the com port
-//    helicopter_serial.clear(); // clear anything in the com port's buffer
-//   } catch (RuntimeException e){
-//    println("OpenBCI_GUI: *** ERROR ***: Could not open " + helicopter_portName);
-//  }
 
 }
 //====================== END--OF ==========================//
@@ -256,8 +241,7 @@ void initSystem(){
     dataPacketBuff[i] = new DataPacket_ADS1299(nchan,n_aux_ifEnabled);
   }
   eegProcessing = new EEG_Processing(nchan,openBCI.get_fs_Hz());
-//  helicopter = new Helicopter(helicopter_serial);
-  eegProcessing_user = new EEG_Processing_User(nchan,openBCI.get_fs_Hz());  //,helicopter);
+  eegProcessing_user = new EEG_Processing_User(nchan,openBCI.get_fs_Hz());
 
 
   //initialize the data
@@ -787,7 +771,6 @@ void serialEvent(Serial port) {
 
       fileoutput.writeRawData_dataPacket(dataPacketBuff[curDataPacketInd],openBCI.get_all_scale_fac_uVolts_per_count(),openBCI.get_scale_fac_accel_G_per_count());
     }
-//  }  else if (port == helicopter_serial) {
 
   }  else {
     println("OpenBCI_GUI: serialEvent: received serial data NOT from OpenBCI.");
