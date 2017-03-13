@@ -1,5 +1,11 @@
 //import ddf.minim.analysis.*; //for FFT
 
+/*
+
+Connect Andy and Melani Delgado
+
+
+*/
 class DetectedPeak {
   int bin;
   float freq_Hz;
@@ -53,8 +59,8 @@ class EEG_Processing_User {
   };  //upper bound for each frequency band of interest
   DetectedPeak[] detectedPeak;  //output per channel, from peak frequency detection
   DetectedPeak[] peakPerBand;
+//  Helicopter helicopter;
   boolean showDetectionOnGUI = true;
-  public boolean useClassfier_2DTraining = false;  //use the fancier classifier?
 
   //class constructor for user defined signal processing rules
   EEG_Processing_User() {
@@ -62,6 +68,7 @@ class EEG_Processing_User {
   EEG_Processing_User(int NCHAN, float sample_rate_Hz) {
     nchan = NCHAN;
     fs_Hz = sample_rate_Hz;
+//    helicopter = copter;
     detectedPeak = new DetectedPeak[nchan];
     for (int Ichan=0; Ichan<nchan; Ichan++) detectedPeak[Ichan]=new DetectedPeak();
 
@@ -79,10 +86,10 @@ class EEG_Processing_User {
   FFT[] fftData) {
 
     if (false) {
-      // to isolate one channel, go here
+      //one person...detect different brain frequencies to drive the hex bug
       processSingleChannel(data_newest_uV, data_long_uV, data_forDisplay_uV, fftData);
     } else {
-      // to target all channels, go here
+      //multi-person...detect one particular frequency, looking across several channels
       processMultiChannel(data_newest_uV, data_long_uV, data_forDisplay_uV, fftData);
     }
   }  // end of process
@@ -97,6 +104,7 @@ class EEG_Processing_User {
 
     boolean isDetected = false;
 
+    // passes a mappedValue to the Helicopter. mapping is done here
     for(int i=0; i<nchan; i++){
       String mappedValue = "";
       findPeakFrequency(fftData, i);  // look for the peak freq on this channel
@@ -107,9 +115,8 @@ class EEG_Processing_User {
         if (detectedPeak[i].SNR_dB >= detection_thresh_dB) {// if it is pronounced
           detectedPeak[i].threshold_dB = detection_thresh_dB;// on the fly threshold adjust (?)
 //          println("detectedPeak channel " + (i+1) + " = " + detectedPeak[i].SNR_dB);  // verbose debug
-
           detectedPeak[i].isDetected = true;// flag that we got a winner
-          isDetected = true;  // make true for verbose output
+          isDetected = true;  // uncomment for verbose output
 
           if (isDetected) {
             //print some output
@@ -117,6 +124,8 @@ class EEG_Processing_User {
               + detectedPeak[i].freq_Hz + " Hz with background at = " + detectedPeak[i].background_rms_uV_perBin
               + ", SNR (dB) = " + detectedPeak[i].SNR_dB + "   " + mappedValue);
               isDetected = false;
+              sendAlphaDetectOverNetowrk(i+1, detectedPeak[i].rms_uV_perBin, detectedPeak[i].freq_Hz,
+                                      detectedPeak[i].background_rms_uV_perBin, detectedPeak[i].SNR_dB);
           }
 
         }
@@ -131,15 +140,15 @@ class EEG_Processing_User {
 
       //user functions here...
 
+    //assume users are on chan 2, 4, 6 (counting from 1) corresponding to left, forward, right
+    //use priority as fire, forward, left, right
     boolean isDetected = false;
     String txt = "";
 
     int Ichan = 2-1;  //  the channel to process
     if (fftData != null) findPeakFrequency(fftData, Ichan); //find the frequency for each channel with the peak amplitude
-    if (useClassfier_2DTraining) {
-      //new processing for improved selectivity
-      if (fftData != null) findBestFrequency_2DTraining(fftData, Ichan);
-    }
+
+
 
       //print some output
       println("EEG_Processing_User: " + txt + "!, Chan " + (Ichan+1) + ", peak = " + detectedPeak[Ichan].rms_uV_perBin + " uV at "
@@ -168,6 +177,7 @@ class EEG_Processing_User {
 
         //get the RMS voltage per bin  (must div by nBins)
         FFT_value_uV = fftData[Ichan].getBand(Ibin) / ((float)nBins);
+        //FFT_value_uV = fftData[Ichan].getBand(Ibin);
 
         //decide if this is bigger, compared to previous bins for this channel
         if (FFT_value_uV > detectedPeak[Ichan].rms_uV_perBin) {
@@ -193,6 +203,7 @@ class EEG_Processing_User {
         }
       }
     }
+//println(int(nBins));
     //compute mean
     detectedPeak[Ichan].background_rms_uV_perBin = sqrt(sum_pow / count);
 
@@ -201,153 +212,11 @@ class EEG_Processing_User {
       = 20.0f*(float)java.lang.Math.log10(detectedPeak[Ichan].rms_uV_perBin
                                   / detectedPeak[Ichan].background_rms_uV_perBin);
 
+
   } //end method findPeakFrequency
 
 
-  void findBestFrequency_2DTraining(FFT[] fftData, int Ichan) {
 
-    //loop over each EEG channel
-    float FFT_freq_Hz, FFT_value_uV;
-    //for (int Ichan=0;Ichan < nchan; Ichan++) {
-    int nBins =  fftData[Ichan].specSize();
-
-    //loop over all bins and comptue SNR for each bin
-    float[] SNR_dB = new float[nBins];
-    float noise_pow_uV = detectedPeak[Ichan].background_rms_uV_perBin;
-    for (int Ibin=0; Ibin < nBins; Ibin++) {
-      FFT_value_uV = fftData[Ichan].getBand(Ibin) / ((float)nBins);  //get the RMS per bin
-      SNR_dB[Ibin] = 20.0f*(float)java.lang.Math.log10(FFT_value_uV / noise_pow_uV);
-    }
-
-    //find peak SNR in each freq band
-    float this_SNR_dB=0.0;
-    int nBands=peakPerBand.length;
-    for (int Iband=0; Iband<nBands; Iband++) {
-      //peakPerBand[Iband] = new DetectedPeak();
-      //init variables for this frequency band
-      peakPerBand[Iband].clear();
-      peakPerBand[Iband].SNR_dB = -100.0;
-      peakPerBand[Iband].background_rms_uV_perBin = detectedPeak[Ichan].background_rms_uV_perBin;
-
-      //loop over all bins
-      for (int Ibin=0; Ibin < nBins; Ibin++) {
-        FFT_freq_Hz = fftData[Ichan].indexToFreq(Ibin); //here is the frequency of this bin
-        if (FFT_freq_Hz >= processing_band_low_Hz[Iband]) {
-          if (FFT_freq_Hz <= processing_band_high_Hz[Iband]) {
-            if (SNR_dB[Ibin] > peakPerBand[Iband].SNR_dB) {
-              peakPerBand[Iband].bin = Ibin;
-              peakPerBand[Iband].freq_Hz = FFT_freq_Hz;
-              peakPerBand[Iband].rms_uV_perBin = fftData[Ichan].getBand(Ibin) / ((float)nBins);
-              peakPerBand[Iband].SNR_dB = SNR_dB[Ibin];
-            }
-          }
-        }
-      } //end loop over bins
-    } //end loop over frequency bands
-
-    //apply new 2D detection rules
-    applyDetectionRules_2D(peakPerBand, detectedPeak[Ichan]);
-
-    //} // end loop over channels
-  }
-
-  void applyDetectionRules_2D(DetectedPeak[] peakPerBand, DetectedPeak detectedPeak) {
-    int band_A = 0, band_B = 1, band_C = 2, band_D = 3;
-    int nRules = 3;
-    float[] value_from_each_rule = new float[nRules];
-    float primary_value_dB=0.0, secondary_value_dB=0.0;
-    int nDetect = 0;
-
-    //allocate the per-rule variables
-    DetectedPeak[] candidate_detection = new DetectedPeak[nRules];  //one for each rule
-    for (int Irule=0; Irule < nRules; Irule++) {
-      candidate_detection[Irule] = new DetectedPeak();
-    }
-
-    //check rule 1 applying to RIGHT command...here, we care about Band A and Band C
-    primary_value_dB = peakPerBand[band_A].SNR_dB;
-    peakPerBand[band_A].copyTo(candidate_detection[0]);
-    secondary_value_dB = peakPerBand[band_C].SNR_dB;
-    float secondary_threshold_dB = 3.0f;
-    peakPerBand[band_A].threshold_dB = max(detection_thresh_dB,
-    max(primary_value_dB, detection_thresh_dB) + max(0, secondary_threshold_dB - secondary_value_dB)); //for plotting purposes only
-    if (primary_value_dB >= detection_thresh_dB) {
-      if (secondary_value_dB >= secondary_threshold_dB) {
-        //detected!
-        nDetect++;
-        value_from_each_rule[0] = primary_value_dB;
-        peakPerBand[band_A].isDetected=true;
-        candidate_detection[0].isDetected=true;
-        //println("applyDetectionRules_2D: rule 0: nDetect = " + nDetect + ", value_from_each_rule[0] = " + value_from_each_rule[0]);
-      }
-    }
-
-    //check rule 2 applying to LEFT command...here, we care about Band B and Band D
-    primary_value_dB = peakPerBand[band_B].SNR_dB;
-    secondary_value_dB = peakPerBand[band_D].SNR_dB;
-    peakPerBand[band_B].threshold_dB = detection_thresh_dB;
-    peakPerBand[band_D].threshold_dB = 4.5 * sqrt(abs(1.1 - pow(primary_value_dB/detection_thresh_dB, 2.0)));
-    if (primary_value_dB >= peakPerBand[band_B].threshold_dB) {
-      //for larger SNR values
-      if (secondary_value_dB >= 0.0f) {
-        //detected!
-        nDetect++;
-        value_from_each_rule[1] = primary_value_dB;
-        peakPerBand[band_B].copyTo(candidate_detection[1]);
-        peakPerBand[band_B].isDetected =true;
-        candidate_detection[1].isDetected=true;
-        //println("applyDetectionRules_2D: rule 1A: nDetect = " + nDetect + ", value_from_each_rule[1] = " + value_from_each_rule[1]);
-      }
-    } else if (primary_value_dB >= 0.0f) {
-      //for smaller SNR values
-      float second_threshold_dB = peakPerBand[band_D].threshold_dB;
-      if (secondary_value_dB >= second_threshold_dB) {
-        //detected!
-        nDetect++;
-        value_from_each_rule[1] = secondary_value_dB;  //create something that is comparable to the other metrics, which are based on detection_thresh_dB
-        peakPerBand[band_D].copyTo(candidate_detection[1]);
-        peakPerBand[band_D].isDetected=true;
-        candidate_detection[1].isDetected=true;
-        //println("applyDetectionRules_2D: rule 1B: nDetect = " + nDetect + ", value_from_each_rule[1] = " + value_from_each_rule[1]);
-      }
-    }
-
-    //check rule 3 applying to FORWARD command...here, we care about Band B and Band D
-    primary_value_dB = peakPerBand[band_C].SNR_dB;
-    peakPerBand[band_C].copyTo(candidate_detection[2]);
-    peakPerBand[band_C].threshold_dB = 3.0;
-    secondary_value_dB = peakPerBand[band_D].SNR_dB;
-    final float slope = (7.5-(-3))/(12-4);
-    final float yoffset = 7.5 - slope*12;
-    float second_threshold_dB = slope * primary_value_dB + yoffset;
-    if (primary_value_dB >= peakPerBand[band_C].threshold_dB) {
-      if (secondary_value_dB <= second_threshold_dB) {  //must be below!  Alpha waves (Band C) should quiet the higher bands (Band D)
-        //detected!
-        nDetect++;
-        value_from_each_rule[2] = primary_value_dB;
-        peakPerBand[band_C].isDetected=true;
-        candidate_detection[2].isDetected=true;
-        //println("applyDetectionRules_2D: rule 2: nDetect = " + nDetect + ", value_from_each_rule[2] = " + value_from_each_rule[2]);
-      }
-    }
-    peakPerBand[band_C].threshold_dB = max(peakPerBand[band_C].threshold_dB, (secondary_value_dB - yoffset) / slope); //for plotting purposes
-
-
-    //clear previous detection
-    detectedPeak.isDetected=false;
-
-    //see if we've had a detection
-    if (nDetect > 0) {
-
-      //find the best value (ie, find the maximum "value_from_each_rule" across all rules)
-      int rule_ind = findMax(value_from_each_rule);
-      //float peak_value = value_from_each_rule[rule_ind];
-
-      //copy over the detection data for that rule/band
-      candidate_detection[rule_ind].copyTo(detectedPeak);
-      //println("applyDetectionRules_2D: detected, rule_ind = " + rule_ind + ", freq = " + detectedPeak.freq_Hz + " Hz, SNR = " + detectedPeak.SNR_dB + " dB");
-    }
-  } // end of applyDetectionRules_2D
 
 
   //routine to add detection graphics to the sceen
@@ -355,16 +224,21 @@ class EEG_Processing_User {
     float x1, y1, x2, y2;
     boolean is_detected;
 
+
     //add detection-related graphics
     if (showDetectionOnGUI) {
 
       //add vertical markers showing detection band
-
-      //for (int Iband=0; Iband<nBands; Iband++) {	// add other bands, Beta, Delta, etctera...
-      for (int Iband=2; Iband<3; Iband++) { // only plot Forward band
+//      int nBands = processing_band_low_Hz.length;
+      //String[] band_txt = {"Right", "Left", "Forward", "Left"};
+//      String[] band_txt = {
+//        "", "", "Alpha", ""
+//      };
+      //for (int Iband=0; Iband<nBands; Iband++) {
+      for (int Iband=2; Iband<3; Iband++) { // only plot Alpha band now
         x1 = pr.valToX(processing_band_low_Hz[Iband]); //lower bound for each frequency band of interest (2D classifier only)
-        y1 = pr.valToY(0.15f);	// bottom of band limit line
-        y2 = pr.valToY(50.0f);	// top of band limit line
+        y1 = pr.valToY(0.15f);
+        y2 = pr.valToY(50.0f);
         addVertDashedLine(pr, x1, y1, y2, 0);
 
         x1 = pr.valToX(processing_band_high_Hz[Iband]); //lower bound for each frequency band of interest (2D classifier only)
@@ -377,8 +251,9 @@ class EEG_Processing_User {
         pr.canvas.fill(0, 0, 0); //black
         pr.canvas.scale(1, -1); //modify the canvas up-down scale so as to flip the text (it's normally upside-down for some reason)
         pr.canvas.textAlign(CENTER, TOP);
-        pr.canvas.text("Alpha", (int)x1, -(int)y1);
+        pr.canvas.text("Alpha", (int)x1, -(int)y1);  // make a string array to hold the band names
         pr.canvas.popMatrix();//return to the original canvas state
+//println("alpha "+ x1 + " " + y1);
       }
 
       //add horizontal lines indicating the background noise level
@@ -386,8 +261,9 @@ class EEG_Processing_User {
         //int Ichan = 2-1; //which channel to show on the GUI
         x1 = pr.valToX(min_allowed_peak_freq_Hz);  //starting coordinate, left
         x2 = pr.valToX(max_allowed_peak_freq_Hz);  //start coordinate, right
-        y1 = pr.valToY(detectedPeak[Ichan].background_rms_uV_perBin * 129); //  nBins = 129
+        y1 = pr.valToY(detectedPeak[Ichan].background_rms_uV_perBin * 129); //y-coordinate
         addHorizDashedLine(pr, x1, x2, y1, 0, Ichan);
+//println("horiz from " + x1 + " to " + x2 + " at " + y1);
         if (useClassfier_2DTraining) {
           //add symbols showing per-band peaks
           for (int Iband=0; Iband<peakPerBand.length; Iband++) {
@@ -396,7 +272,7 @@ class EEG_Processing_User {
             x2 = pr.valToX(processing_band_high_Hz[Iband]);
             float thresh_dB = peakPerBand[Iband].threshold_dB;
             float val_uV_perBin = detectedPeak[Ichan].background_rms_uV_perBin * sqrt(pow(10.0, thresh_dB/10.0));
-            y1 = pr.valToY(val_uV_perBin * 129); //y-coordinate * nBins
+            y1 = pr.valToY(val_uV_perBin); //y-coordinate * nBins
             addHorizDashedLine(pr, x1, x2, y1, 1, Iband);
 
             //add peak
@@ -410,9 +286,12 @@ class EEG_Processing_User {
           x1 = pr.valToX(detectedPeak[Ichan].freq_Hz);
           y1 = pr.valToY(detectedPeak[Ichan].rms_uV_perBin * 129); // *nBins
           is_detected = detectedPeak[Ichan].isDetected;
+//print(Ichan + " ");
           addMarker(pr, x1, y1, is_detected, Ichan);
+//println(Ichan + " " + x1 + " " + y1 + " " + is_detected);
         }
       }
+//println();
     }
   }
 
@@ -446,6 +325,7 @@ class EEG_Processing_User {
           break;
         }
       pr.canvas.pushMatrix(); //hold on to the current canvas state
+//      pr.canvas.stroke(0);  //black
       pr.canvas.fill(255); //white
       pr.canvas.strokeWeight(1);  //set the new line's linewidth
       if (is_detected) { //if there is a detection, make more prominent
@@ -454,6 +334,7 @@ class EEG_Processing_User {
       ellipseMode(CENTER);
       pr.canvas.ellipse(new_x2, new_y2, diam, diam);
       pr.canvas.popMatrix(); //hold on to the current canvas state
+//println("marker at " + new_x2 + " " + new_y2 + " " + diam + " OD");
     }
 
   //draw a horizontal dashed line on the given axes
@@ -485,6 +366,7 @@ class EEG_Processing_User {
           break;
         }
     pr.canvas.pushMatrix(); //hold on to the current canvas state
+//    pr.canvas.stroke(0, 0, 0);  //black
     float dx; //it'll be a dashed line, so here is how long is the dash+space, pixels
     if (style==1) {
       dx = 4;
@@ -733,4 +615,3 @@ class EEG_Processing {
     }
   }
 }
-
